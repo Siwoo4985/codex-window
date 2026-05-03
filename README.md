@@ -1,5 +1,9 @@
 # codex-window
 
+[![macOS](https://img.shields.io/badge/macOS-only-000000?logo=apple&logoColor=white)](#install)
+[![zsh](https://img.shields.io/badge/shell-zsh-4EAA25)](bin/codex-window)
+[![License: MIT](https://img.shields.io/github/license/Siwoo4985/codex-window)](LICENSE)
+
 Launch multiple independent OpenAI Codex desktop windows on macOS.
 
 `codex-window` is a small zsh launcher for `Codex.app`. It gives each launched
