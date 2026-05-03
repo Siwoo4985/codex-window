@@ -1,20 +1,24 @@
 # codex-window
 
-Open multiple independent OpenAI Codex desktop windows on macOS.
+Launch multiple independent OpenAI Codex desktop windows on macOS.
 
-`codex-window` is a tiny zsh launcher for `Codex.app`. It starts each window
-with a separate Electron user data directory via `CODEX_ELECTRON_USER_DATA_PATH`,
-which avoids the single-instance lock that normally brings the existing Codex
-window to the front.
+`codex-window` is a small zsh launcher for `Codex.app`. It gives each launched
+window its own Electron user data directory, so macOS opens separate Codex
+instances instead of focusing the one that is already running.
 
-## Why
-
-The Codex desktop app currently has an open macOS feature request for native
-multi-window support. Until that lands, this launcher gives each window its own
-profile so separate Codex instances can run side by side across projects,
-monitors, or macOS Spaces.
+```sh
+cw 3
+```
 
 ## Install
+
+Requirements:
+
+- macOS
+- OpenAI Codex desktop app installed at `/Applications/Codex.app`
+- zsh
+
+Install from GitHub:
 
 ```sh
 git clone https://github.com/Siwoo4985/codex-window.git
@@ -22,16 +26,16 @@ cd codex-window
 ./scripts/install
 ```
 
-The installer creates two symlinks in `~/.local/bin`:
+The installer creates these symlinks in `~/.local/bin`:
 
 ```text
 codex-window
 cw
 ```
 
-Make sure `~/.local/bin` is on your `PATH`.
+If your shell cannot find `cw`, add `~/.local/bin` to your `PATH`.
 
-## Usage
+## Use
 
 Open one new Codex window:
 
@@ -39,10 +43,10 @@ Open one new Codex window:
 cw
 ```
 
-Open several new windows:
+Open several new Codex windows:
 
 ```sh
-cw 3
+cw 10
 ```
 
 Open one named profile:
@@ -52,7 +56,7 @@ cw frontend
 cw --name docs
 ```
 
-Pass extra arguments to Codex after `--`:
+Pass arguments to Codex after `--`:
 
 ```sh
 cw frontend -- ~/Projects/my-app
@@ -64,29 +68,22 @@ Use the long command if you prefer:
 codex-window 3
 ```
 
-## Profiles
-
-By default, profile data and logs are stored in:
+## Command Reference
 
 ```text
-~/Library/Application Support/Codex-Window/
+cw [count] [-- extra Codex args...]
+cw --count <count> [-- extra Codex args...]
+cw --name <profile> [-- extra Codex args...]
+cw --profile <profile> [-- extra Codex args...]
 ```
 
-Each generated window uses a profile like `window-1`, `window-2`, and so on.
-Named profiles use the name you pass.
-
-Override the profile root:
-
-```sh
-CODEX_WINDOW_PROFILE_ROOT="$HOME/.codex-window-profiles" cw 2
-```
-
-## Options
+Options:
 
 ```text
 -c, --count <count>        Open this many new Codex windows.
 -n, --name <profile>      Open one named profile.
     --profile <profile>   Alias for --name.
+    --slot <count>        Compatibility alias for --count.
     --app <path>          Codex.app path. Default: /Applications/Codex.app
     --profile-root <dir>  Profile root directory.
     --dry-run             Print launch commands without opening windows.
@@ -94,26 +91,74 @@ CODEX_WINDOW_PROFILE_ROOT="$HOME/.codex-window-profiles" cw 2
     --version             Show version.
 ```
 
-`--slot <count>` is accepted as a compatibility alias for `--count`, but the
-short form is usually clearer:
+## Profiles And Logs
+
+By default, profile data and logs are stored in:
+
+```text
+~/Library/Application Support/Codex-Window/
+```
+
+Generated windows use profiles like `window-1`, `window-2`, and `window-3`.
+Named profiles use the name you pass, such as `frontend` or `docs`.
+
+Override the profile root:
 
 ```sh
-cw 10
+CODEX_WINDOW_PROFILE_ROOT="$HOME/.codex-window-profiles" cw 2
+```
+
+Override the Codex app path:
+
+```sh
+CODEX_WINDOW_APP="/Applications/Codex Canary.app" cw 2
+```
+
+## How It Works
+
+Codex desktop is an Electron app. `codex-window` launches it with:
+
+```text
+CODEX_ELECTRON_USER_DATA_PATH=<profile-dir>
+open -n /Applications/Codex.app
+```
+
+Because each window gets a different user data directory, Electron treats each
+launch as a separate app profile. That avoids the single-instance behavior that
+normally routes new launches back to the existing Codex window.
+
+## Troubleshooting
+
+Check what would be launched without opening Codex:
+
+```sh
+cw --dry-run 2
+```
+
+If `cw` is not found, run:
+
+```sh
+echo $PATH
+```
+
+and make sure `~/.local/bin` is included.
+
+If Codex is installed somewhere else:
+
+```sh
+cw --app "/path/to/Codex.app" 2
 ```
 
 ## Notes
 
-- This is macOS-only.
-- This is not affiliated with OpenAI.
-- Each window has a separate Electron app data profile. Depending on how Codex
-  stores auth on your machine, a new profile may need its own login.
+- This project is macOS-only.
+- This project is not affiliated with OpenAI.
+- Each window uses a separate Electron app data profile. Depending on your
+  Codex auth state, a new profile may need its own login.
 - Running many Codex windows can start many helper/app-server processes and use
   significant memory.
 
 ## Related Work
-
-I did not find an existing open-source project focused on this exact macOS
-Codex.app multi-window launcher use case. Related but different projects:
 
 - [openai/codex#12773](https://github.com/openai/codex/issues/12773) tracks
   native macOS multi-window support for the Codex desktop app.
@@ -124,13 +169,13 @@ Codex.app multi-window launcher use case. Related but different projects:
 
 ## Development
 
-Run a syntax check:
+Run syntax checks:
 
 ```sh
 zsh -n bin/codex-window scripts/install
 ```
 
-Preview launch commands without opening Codex:
+Preview generated launch commands:
 
 ```sh
 bin/codex-window --dry-run 2
