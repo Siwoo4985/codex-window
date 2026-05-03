@@ -1,0 +1,230 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+readonly VERSION="0.1.0"
+cmd_name="${0:t}"
+
+usage() {
+  cat <<USAGE
+Usage:
+  $cmd_name [count] [-- extra Codex args...]
+  $cmd_name --count <count> [-- extra Codex args...]
+  $cmd_name --name <profile> [-- extra Codex args...]
+  $cmd_name --profile <profile> [-- extra Codex args...]
+
+Examples:
+  $cmd_name
+  $cmd_name 3
+  $cmd_name --name frontend
+  $cmd_name docs -- /Users/me/project
+
+Options:
+  -c, --count <count>        Open this many new Codex windows.
+  -n, --name <profile>      Open one named profile.
+      --profile <profile>   Alias for --name.
+      --app <path>          Codex.app path. Default: /Applications/Codex.app
+      --profile-root <dir>  Profile root directory.
+      --dry-run             Print launch commands without opening windows.
+  -h, --help                Show this help.
+      --version             Show version.
+
+Numeric positional arguments are treated as a window count. Non-numeric
+positional arguments open one named profile. Each profile uses a separate
+Codex app data directory, allowing multiple Codex.app instances to run at the
+same time.
+USAGE
+}
+
+app_bundle="${CODEX_WINDOW_APP:-/Applications/Codex.app}"
+profile_root="${CODEX_WINDOW_PROFILE_ROOT:-$HOME/Library/Application Support/Codex-Window}"
+count=""
+profile=""
+dry_run=false
+codex_args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --version)
+      print -r -- "$VERSION"
+      exit 0
+      ;;
+    -c|--count)
+      if [[ $# -lt 2 ]]; then
+        print -u2 "Missing value for $1"
+        exit 2
+      fi
+      count="$2"
+      shift 2
+      ;;
+    --slot)
+      if [[ $# -lt 2 ]]; then
+        print -u2 "Missing value for --slot"
+        exit 2
+      fi
+      count="$2"
+      shift 2
+      ;;
+    -n|--name|--profile)
+      if [[ $# -lt 2 ]]; then
+        print -u2 "Missing value for $1"
+        exit 2
+      fi
+      profile="$2"
+      shift 2
+      ;;
+    --app)
+      if [[ $# -lt 2 ]]; then
+        print -u2 "Missing value for --app"
+        exit 2
+      fi
+      app_bundle="$2"
+      shift 2
+      ;;
+    --profile-root)
+      if [[ $# -lt 2 ]]; then
+        print -u2 "Missing value for --profile-root"
+        exit 2
+      fi
+      profile_root="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    --)
+      shift
+      codex_args=("$@")
+      break
+      ;;
+    -*)
+      print -u2 "Unknown option: $1"
+      exit 2
+      ;;
+    *)
+      if [[ -n "$count" || -n "$profile" ]]; then
+        codex_args=("$@")
+        break
+      fi
+      if [[ "$1" == <-> ]]; then
+        count="$1"
+      else
+        profile="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -n "$count" && -n "$profile" ]]; then
+  print -u2 "Use either a count or a named profile, not both"
+  exit 2
+fi
+
+if [[ -n "$count" ]]; then
+  if [[ ! "$count" == <-> ]] || (( count < 1 )); then
+    print -u2 "Count must be a positive integer"
+    exit 2
+  fi
+fi
+
+if [[ "$dry_run" != true && ! -d "$app_bundle" ]]; then
+  print -u2 "Codex app not found: $app_bundle"
+  exit 1
+fi
+
+mkdir -p "$profile_root"
+
+sanitize_profile() {
+  local raw_profile="$1"
+  local safe_profile
+  safe_profile="$(printf '%s' "$raw_profile" | LC_CTYPE=C tr -cs 'A-Za-z0-9._-' '-')"
+  safe_profile="${safe_profile#-}"
+  safe_profile="${safe_profile%-}"
+  if [[ -z "$safe_profile" ]]; then
+    print -u2 "Profile must contain at least one letter, number, dot, underscore, or dash"
+    exit 2
+  fi
+  print -r -- "$safe_profile"
+}
+
+allocate_profile() {
+  local counter_file="$profile_root/.next-profile"
+  local next_profile=1
+  local existing_profile existing_name saved_next_profile
+
+  for existing_profile in "$profile_root"/window-<->(N/); do
+    existing_name="${existing_profile:t}"
+    existing_name="${existing_name#window-}"
+    (( existing_name >= next_profile )) && next_profile=$((existing_name + 1))
+  done
+
+  if [[ -r "$counter_file" ]]; then
+    saved_next_profile="$(<"$counter_file")"
+    if [[ "$saved_next_profile" == <-> ]] && (( saved_next_profile > next_profile )); then
+      next_profile="$saved_next_profile"
+    fi
+  fi
+
+  print -r -- "$((next_profile + 1))" > "$counter_file"
+  print -r -- "window-$next_profile"
+}
+
+launch_profile() {
+  local raw_profile="$1"
+  shift
+
+  local safe_profile profile_dir log_file err_file
+  safe_profile="$(sanitize_profile "$raw_profile")"
+  profile_dir="$profile_root/$safe_profile"
+  log_file="$profile_root/$safe_profile.log"
+  err_file="$profile_root/$safe_profile.err.log"
+  mkdir -p "$profile_dir"
+
+  local open_args=(
+    -n
+    --env "CODEX_ELECTRON_USER_DATA_PATH=$profile_dir"
+    --stdout "$log_file"
+    --stderr "$err_file"
+    "$app_bundle"
+  )
+
+  if [[ "$dry_run" == true ]]; then
+    local rendered_open="open"
+    local arg
+    for arg in "${open_args[@]}"; do
+      rendered_open+=" ${(q)arg}"
+    done
+    if [[ $# -gt 0 ]]; then
+      rendered_open+=" --args"
+      for arg in "$@"; do
+        rendered_open+=" ${(q)arg}"
+      done
+    fi
+    print -r -- "$rendered_open"
+  elif [[ $# -gt 0 ]]; then
+    open "${open_args[@]}" --args "$@"
+  else
+    open "${open_args[@]}"
+  fi
+
+  print -r -- "Profile: $safe_profile"
+  print -r -- "Data: $profile_dir"
+  print -r -- "Log: $log_file"
+  print -r -- "Error log: $err_file"
+}
+
+if [[ -n "$count" ]]; then
+  for (( i = 1; i <= count; i++ )); do
+    launch_profile "$(allocate_profile)" "${codex_args[@]}"
+  done
+else
+  if [[ -z "$profile" ]]; then
+    profile="$(allocate_profile)"
+  fi
+  launch_profile "$profile" "${codex_args[@]}"
+fi

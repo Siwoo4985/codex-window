@@ -1,0 +1,16 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+repo_dir="${0:A:h:h}"
+prefix="${PREFIX:-$HOME/.local}"
+bin_dir="$prefix/bin"
+
+mkdir -p "$bin_dir"
+ln -sf "$repo_dir/bin/codex-window" "$bin_dir/codex-window"
+ln -sf "$repo_dir/bin/codex-window" "$bin_dir/cw"
+
+print -r -- "Installed:"
+print -r -- "  $bin_dir/codex-window"
+print -r -- "  $bin_dir/cw"
+print -r -- ""
+print -r -- "Make sure $bin_dir is on PATH."
