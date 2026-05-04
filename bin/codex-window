@@ -19,7 +19,7 @@ Examples:
   $cmd_name docs -- /Users/me/project
 
 Options:
-  -c, --count <count>        Open this many new Codex windows.
+  -c, --count <count>        Open this many generated profiles.
   -n, --name <profile>      Open one named profile.
       --profile <profile>   Alias for --name.
       --app <path>          Codex.app path. Default: /Applications/Codex.app
@@ -28,10 +28,9 @@ Options:
   -h, --help                Show this help.
       --version             Show version.
 
-Numeric positional arguments are treated as a window count. Non-numeric
+Numeric positional arguments are treated as a profile count. Non-numeric
 positional arguments open one named profile. Each profile uses a separate
-Codex app data directory, allowing multiple Codex.app instances to run at the
-same time.
+Codex app data directory.
 USAGE
 }
 
@@ -41,6 +40,7 @@ count=""
 profile=""
 dry_run=false
 codex_args=()
+allocated_profiles=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -163,6 +163,11 @@ allocate_profile() {
     (( existing_name >= next_profile )) && next_profile=$((existing_name + 1))
   done
 
+  for existing_name in "${allocated_profiles[@]}"; do
+    existing_name="${existing_name#window-}"
+    (( existing_name >= next_profile )) && next_profile=$((existing_name + 1))
+  done
+
   if [[ -r "$counter_file" ]]; then
     saved_next_profile="$(<"$counter_file")"
     if [[ "$saved_next_profile" == <-> ]] && (( saved_next_profile > next_profile )); then
@@ -170,7 +175,10 @@ allocate_profile() {
     fi
   fi
 
-  print -r -- "$((next_profile + 1))" > "$counter_file"
+  if [[ "$dry_run" != true ]]; then
+    print -r -- "$((next_profile + 1))" > "$counter_file"
+  fi
+  allocated_profiles+=("window-$next_profile")
   print -r -- "window-$next_profile"
 }
 
@@ -183,7 +191,9 @@ launch_profile() {
   profile_dir="$profile_root/$safe_profile"
   log_file="$profile_root/$safe_profile.log"
   err_file="$profile_root/$safe_profile.err.log"
-  mkdir -p "$profile_dir"
+  if [[ "$dry_run" != true ]]; then
+    mkdir -p "$profile_dir"
+  fi
 
   local open_args=(
     -n
